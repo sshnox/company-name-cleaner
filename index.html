@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Company Name Cleaner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#16211c;
+    --paper:#f6f4ee;
+    --panel:#ffffff;
+    --line:#d9d5c8;
+    --line-strong:#b9b3a0;
+    --moss:#2f6b4f;
+    --moss-light:#e6efe8;
+    --moss-dark:#1e4a37;
+    --rust:#b5502e;
+    --rust-light:#f7e8e1;
+    --muted:#6b675c;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:980px;margin:0 auto;padding:40px 28px 80px;}
+  .masthead{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    border-bottom:2px solid var(--ink);
+    padding-bottom:16px;margin-bottom:28px;
+  }
+  .masthead h1{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:600;font-size:26px;margin:0;letter-spacing:-0.01em;
+  }
+  .masthead p{margin:4px 0 0;color:var(--muted);font-size:13px;font-family:'IBM Plex Mono',monospace;}
+  .badge{
+    font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--moss-dark);
+    background:var(--moss-light);border:1px solid var(--moss);border-radius:20px;
+    padding:4px 12px;white-space:nowrap;
+  }
+
+  /* pipeline strip */
+  .pipeline{
+    display:flex;gap:0;margin-bottom:32px;border:1px solid var(--line);
+    border-radius:10px;overflow:hidden;background:var(--panel);
+  }
+  .stage{
+    flex:1;padding:11px 6px;text-align:center;font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;color:var(--muted);border-right:1px solid var(--line);
+    position:relative;transition:background .25s, color .25s;
+  }
+  .stage:last-child{border-right:none;}
+  .stage .n{display:block;font-size:9px;color:var(--line-strong);margin-bottom:3px;}
+  .stage.active{background:var(--moss);color:#fff;}
+  .stage.active .n{color:#cfe6da;}
+
+  .panel{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:22px;margin-bottom:22px;
+  }
+  .panel h2{
+    font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;
+    margin:0 0 14px;text-transform:uppercase;letter-spacing:.04em;color:var(--moss-dark);
+  }
+
+  textarea{
+    width:100%;min-height:120px;border:1px solid var(--line);border-radius:8px;
+    padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:13px;
+    resize:vertical;background:#fdfcf9;color:var(--ink);
+  }
+  textarea:focus{outline:none;border-color:var(--moss);}
+
+  .drop{
+    border:1.5px dashed var(--line-strong);border-radius:8px;padding:20px;
+    text-align:center;color:var(--muted);font-size:13px;margin-top:12px;
+    cursor:pointer;transition:border-color .2s, background .2s;
+  }
+  .drop:hover, .drop.drag{border-color:var(--moss);background:var(--moss-light);}
+  .drop input{display:none;}
+
+  .row{display:flex;gap:12px;align-items:center;margin-top:14px;flex-wrap:wrap;}
+  button{
+    font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px;
+    padding:11px 20px;border-radius:8px;border:1px solid var(--ink);
+    background:var(--ink);color:#fff;cursor:pointer;transition:transform .12s, background .2s;
+  }
+  button:hover{background:var(--moss-dark);border-color:var(--moss-dark);}
+  button:active{transform:scale(0.97);}
+  button.secondary{background:transparent;color:var(--ink);}
+  button.secondary:hover{background:var(--moss-light);color:var(--moss-dark);border-color:var(--moss);}
+  button:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+
+  .stats{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px;}
+  .stat{
+    flex:1;min-width:130px;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:14px 16px;
+  }
+  .stat .label{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace;text-transform:uppercase;letter-spacing:.04em;}
+  .stat .value{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:600;margin-top:3px;}
+  .stat.accent .value{color:var(--moss);}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{
+    text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;
+    text-transform:uppercase;letter-spacing:.04em;color:var(--muted);
+    padding:8px 10px;border-bottom:2px solid var(--ink);position:sticky;top:0;background:var(--panel);
+  }
+  tbody td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+  tbody tr:hover{background:#faf8f3;}
+  .orig{color:var(--muted);}
+  .clean{font-weight:500;}
+  .clean.changed{color:var(--moss-dark);}
+  .arrow{color:var(--line-strong);padding:0 4px;}
+  .tag-changed{
+    display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;
+    background:var(--rust-light);color:var(--rust);border-radius:10px;padding:1px 7px;margin-left:8px;
+  }
+  .table-wrap{max-height:480px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;}
+  .table-wrap table{margin:0;}
+  .table-wrap thead th{top:0;}
+
+  .empty{text-align:center;color:var(--muted);padding:40px 0;font-size:13px;}
+  .foot-note{font-size:12px;color:var(--muted);margin-top:10px;font-family:'IBM Plex Mono',monospace;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div>
+      <h1>Company name cleaner</h1>
+      <p>strip suffixes, taglines and symbols &mdash; get spintax-ready names</p>
+    </div>
+    <span class="badge">runs entirely in your browser</span>
+  </div>
+
+  <div class="pipeline" id="pipeline">
+    <div class="stage" data-stage="0"><span class="n">01</span>parens</div>
+    <div class="stage" data-stage="1"><span class="n">02</span>symbols</div>
+    <div class="stage" data-stage="2"><span class="n">03</span>pipe</div>
+    <div class="stage" data-stage="3"><span class="n">04</span>colon</div>
+    <div class="stage" data-stage="4"><span class="n">05</span>dash</div>
+    <div class="stage" data-stage="5"><span class="n">06</span>suffix</div>
+    <div class="stage" data-stage="6"><span class="n">07</span>comma</div>
+    <div class="stage" data-stage="7"><span class="n">08</span>trim</div>
+    <div class="stage" data-stage="8"><span class="n">09</span>caps</div>
+  </div>
+
+  <div class="panel">
+    <h2>Input</h2>
+    <textarea id="input" placeholder="Paste company names here, one per line...&#10;&#10;The Cole Group&#10;Areti Group | B Corp™&#10;Paragon Alpha - Hedge Fund Talent Business"></textarea>
+    <div class="drop" id="drop">
+      Drop a CSV here, or click to browse &mdash; first column is used, header row optional
+      <input type="file" id="file" accept=".csv,.txt" />
+    </div>
+    <div class="row">
+      <button id="processBtn">Clean names</button>
+      <button class="secondary" id="clearBtn">Clear</button>
+      <span class="foot-note" id="inputCount"></span>
+    </div>
+  </div>
+
+  <div id="results" style="display:none;">
+    <div class="stats">
+      <div class="stat"><div class="label">Total rows</div><div class="value" id="statTotal">0</div></div>
+      <div class="stat"><div class="label">Unique names</div><div class="value" id="statUnique">0</div></div>
+      <div class="stat accent"><div class="label">Cleaned / changed</div><div class="value" id="statChanged">0</div></div>
+    </div>
+
+    <div class="panel" style="padding:0;overflow:hidden;">
+      <div style="padding:18px 22px 0;">
+        <h2 style="margin-bottom:8px;">Preview</h2>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th style="width:48%;">Original</th><th style="width:4%;"></th><th>Cleaned</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="row" style="padding:16px 22px;">
+        <button id="downloadBtn">Download cleaned CSV</button>
+        <span class="foot-note">Column A = original, Column B = clean name</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const LEGAL_SUFFIX_RE = /,?\s*\b(L\.?L\.?C\.?|Incorporated|Inc\.?|Ltd\.?|Limited|L\.?L\.?P\.?|L\.?P\.?|Co\.|Corp\.?|Corporation|PLC|GmbH|Kft\.?)\.?\s*$/i;
+const DASH_SPLIT_RE = /\s-\s|\s-(?=\S)|(?<=\S)-\s/;
+
+const OVERRIDES = {
+  'Kalon Executive Search for Nutraceuticals, CPG and Wellness': 'Kalon Executive Search',
+  'Spherion Staffing South Central WI & Northern IL': 'Spherion Staffing',
+  'MJk Connections': 'MJK Connections',
+  'Global Talent Partners Veterinary': 'Global Talent Partners',
+};
+
+function smartTitleCaseIfShouting(s){
+  const words = s.split(' ');
+  if(words.length < 2) return s;
+  const lettersOnly = s.replace(/[^A-Za-z]/g,'');
+  if(!lettersOnly || lettersOnly !== lettersOnly.toUpperCase()) return s;
+  return words.map(w=>{
+    const alpha = w.replace(/[^A-Za-z]/g,'');
+    if(alpha && alpha.length<=3 && w===w.toUpperCase()) return w;
+    return w.length? w[0].toUpperCase()+w.slice(1).toLowerCase() : w;
+  }).join(' ');
+}
+
+function clean(name){
+  if(OVERRIDES.hasOwnProperty(name)) return OVERRIDES[name];
+  let s = name.trim();
+
+  s = s.replace(/\s*\([^)]*\)/g, '');
+  s = s.replace(/[^\x00-\x7F]+/g, '').trim();
+
+  if(s.includes('|')) s = s.split('|')[0].trim();
+
+  s = s.split(/:\s+/)[0].trim();
+
+  const parts = s.split(DASH_SPLIT_RE);
+  if(parts.length > 1) s = parts[0].trim();
+
+  if(/&\s*Co\.?\s*$/i.test(s)){
+    // keep idiomatic "& Co." endings intact
+  } else {
+    let prev = null;
+    while(prev !== s){
+      prev = s;
+      s = s.replace(LEGAL_SUFFIX_RE, '').trim();
+    }
+  }
+
+  if(s.includes(',')) s = s.split(',')[0].trim();
+
+  s = s.replace(/[!.]+$/,'').trim();
+  s = s.replace(/\s{2,}/g,' ').trim();
+
+  s = smartTitleCaseIfShouting(s);
+
+  return s;
+}
+
+function parseCSVLine(line){
+  // simple CSV cell extractor for the first column, handles quoted commas
+  if(line[0] === '"'){
+    let i=1, out='';
+    while(i<line.length){
+      if(line[i]==='"' && line[i+1]==='"'){ out+='"'; i+=2; continue; }
+      if(line[i]==='"') break;
+      out+=line[i]; i++;
+    }
+    return out;
+  }
+  const idx = line.indexOf(',');
+  return idx===-1 ? line : line.slice(0, idx);
+}
+
+function getRawLines(text){
+  return text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>0);
+}
+
+let currentPairs = [];
+
+function animatePipeline(cb){
+  const stages = document.querySelectorAll('.stage');
+  let i=0;
+  stages.forEach(s=>s.classList.remove('active'));
+  const iv = setInterval(()=>{
+    stages.forEach(s=>s.classList.remove('active'));
+    if(i < stages.length){ stages[i].classList.add('active'); i++; }
+    else { clearInterval(iv); stages.forEach(s=>s.classList.remove('active')); cb(); }
+  }, 70);
+}
+
+function process(){
+  const raw = document.getElementById('input').value;
+  let lines = getRawLines(raw);
+  if(lines.length===0) return;
+
+  // drop a plausible header row like "Company Name"
+  if(/^(company( ?name)?|name|organi[sz]ation)$/i.test(lines[0].replace(/["']/g,'').trim())){
+    lines = lines.slice(1);
+  }
+
+  const names = lines.map(parseCSVLine).filter(n=>n.length>0);
+  currentPairs = names.map(n => [n, clean(n)]);
+
+  animatePipeline(()=>renderResults());
+}
+
+function renderResults(){
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  let changed = 0;
+  const seen = new Set();
+
+  currentPairs.forEach(([orig, cl])=>{
+    seen.add(orig);
+    if(orig !== cl) changed++;
+    const tr = document.createElement('tr');
+    const isChanged = orig !== cl;
+    tr.innerHTML = `
+      <td class="orig">${escapeHtml(orig)}</td>
+      <td class="arrow">${isChanged ? '&rarr;' : ''}</td>
+      <td class="clean ${isChanged?'changed':''}">${escapeHtml(cl)}${isChanged?'<span class="tag-changed">changed</span>':''}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('statTotal').textContent = currentPairs.length;
+  document.getElementById('statUnique').textContent = seen.size;
+  document.getElementById('statChanged').textContent = changed;
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('inputCount').textContent = currentPairs.length + ' rows detected';
+}
+
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function csvCell(s){
+  if(/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
+  return s;
+}
+
+document.getElementById('processBtn').addEventListener('click', process);
+
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  document.getElementById('input').value='';
+  document.getElementById('results').style.display='none';
+  document.getElementById('inputCount').textContent='';
+  currentPairs = [];
+});
+
+document.getElementById('input').addEventListener('input', (e)=>{
+  const n = getRawLines(e.target.value).length;
+  document.getElementById('inputCount').textContent = n ? n + ' rows detected' : '';
+});
+
+document.getElementById('downloadBtn').addEventListener('click', ()=>{
+  const header = 'Company Name,Clean Company Name\n';
+  const body = currentPairs.map(([o,c])=>csvCell(o)+','+csvCell(c)).join('\n');
+  const blob = new Blob([header+body], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'cleaned_company_names.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+const dropZone = document.getElementById('drop');
+const fileInput = document.getElementById('file');
+dropZone.addEventListener('click', ()=>fileInput.click());
+dropZone.addEventListener('dragover', (e)=>{e.preventDefault(); dropZone.classList.add('drag');});
+dropZone.addEventListener('dragleave', ()=>dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', (e)=>{
+  e.preventDefault(); dropZone.classList.remove('drag');
+  if(e.dataTransfer.files.length) readFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', (e)=>{
+  if(e.target.files.length) readFile(e.target.files[0]);
+});
+function readFile(file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    document.getElementById('input').value = e.target.result;
+    const n = getRawLines(e.target.result).length;
+    document.getElementById('inputCount').textContent = n + ' rows detected';
+  };
+  reader.readAsText(file);
+}
+</script>
+</body>
+</html>
