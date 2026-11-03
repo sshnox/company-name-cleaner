@@ -135,30 +135,27 @@
   <div class="masthead">
     <div>
       <h1>Company name cleaner</h1>
-      <p>strip suffixes, taglines and symbols &mdash; get spintax-ready names</p>
+      <p>clean company names while preserving international text</p>
     </div>
     <span class="badge">runs entirely in your browser</span>
-  </div>
-
-  <div class="pipeline" id="pipeline">
-    <div class="stage" data-stage="0"><span class="n">01</span>parens</div>
-    <div class="stage" data-stage="1"><span class="n">02</span>symbols</div>
-    <div class="stage" data-stage="2"><span class="n">03</span>pipe</div>
-    <div class="stage" data-stage="3"><span class="n">04</span>colon</div>
-    <div class="stage" data-stage="4"><span class="n">05</span>dash</div>
-    <div class="stage" data-stage="5"><span class="n">06</span>suffix</div>
-    <div class="stage" data-stage="6"><span class="n">07</span>comma</div>
-    <div class="stage" data-stage="7"><span class="n">08</span>trim</div>
-    <div class="stage" data-stage="8"><span class="n">09</span>caps</div>
   </div>
 
   <div class="panel">
     <h2>Input</h2>
     <textarea id="input" placeholder="Paste company names here, one per line...&#10;&#10;The Cole Group&#10;Areti Group | B Corp™&#10;Paragon Alpha - Hedge Fund Talent Business"></textarea>
     <div class="drop" id="drop">
-      Drop a CSV here, or click to browse &mdash; first column is used, header row optional
+      Drop a CSV here, or click to browse &mdash; choose the company column below
       <input type="file" id="file" accept=".csv,.txt" />
     </div>
+    <div class="row">
+      <label>Input format <select id="inputMode"><option value="names">One name per line</option><option value="csv">CSV</option></select></label>
+      <label><input type="checkbox" id="hasHeader"> First row is a header</label>
+      <label>Company column <select id="companyColumn"><option value="0">Column 1</option></select></label>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="removeDescriptors"> Also remove taglines and parenthetical text (review results)</label>
+    </div>
+    <p id="error" role="alert" style="color:var(--rust)"></p>
     <div class="row">
       <button id="processBtn">Clean names</button>
       <button class="secondary" id="clearBtn">Clear</button>
@@ -192,109 +189,53 @@
 
 </div>
 
+<script src="core.js"></script>
 <script>
-const LEGAL_SUFFIX_RE = /,?\s*\b(L\.?L\.?C\.?|Incorporated|Inc\.?|Ltd\.?|Limited|L\.?L\.?P\.?|L\.?P\.?|Co\.|Corp\.?|Corporation|PLC|GmbH|Kft\.?)\.?\s*$/i;
-const DASH_SPLIT_RE = /\s-\s|\s-(?=\S)|(?<=\S)-\s/;
-
-const OVERRIDES = {
-  'Kalon Executive Search for Nutraceuticals, CPG and Wellness': 'Kalon Executive Search',
-  'Spherion Staffing South Central WI & Northern IL': 'Spherion Staffing',
-  'MJk Connections': 'MJK Connections',
-  'Global Talent Partners Veterinary': 'Global Talent Partners',
-};
-
-function smartTitleCaseIfShouting(s){
-  const words = s.split(' ');
-  if(words.length < 2) return s;
-  const lettersOnly = s.replace(/[^A-Za-z]/g,'');
-  if(!lettersOnly || lettersOnly !== lettersOnly.toUpperCase()) return s;
-  return words.map(w=>{
-    const alpha = w.replace(/[^A-Za-z]/g,'');
-    if(alpha && alpha.length<=3 && w===w.toUpperCase()) return w;
-    return w.length? w[0].toUpperCase()+w.slice(1).toLowerCase() : w;
-  }).join(' ');
-}
-
-function clean(name){
-  if(OVERRIDES.hasOwnProperty(name)) return OVERRIDES[name];
-  let s = name.trim();
-
-  s = s.replace(/\s*\([^)]*\)/g, '');
-  s = s.replace(/[^\x00-\x7F]+/g, '').trim();
-
-  if(s.includes('|')) s = s.split('|')[0].trim();
-
-  s = s.split(/:\s+/)[0].trim();
-
-  const parts = s.split(DASH_SPLIT_RE);
-  if(parts.length > 1) s = parts[0].trim();
-
-  if(/&\s*Co\.?\s*$/i.test(s)){
-    // keep idiomatic "& Co." endings intact
-  } else {
-    let prev = null;
-    while(prev !== s){
-      prev = s;
-      s = s.replace(LEGAL_SUFFIX_RE, '').trim();
-    }
-  }
-
-  if(s.includes(',')) s = s.split(',')[0].trim();
-
-  s = s.replace(/[!.]+$/,'').trim();
-  s = s.replace(/\s{2,}/g,' ').trim();
-
-  s = smartTitleCaseIfShouting(s);
-
-  return s;
-}
-
-function parseCSVLine(line){
-  // simple CSV cell extractor for the first column, handles quoted commas
-  if(line[0] === '"'){
-    let i=1, out='';
-    while(i<line.length){
-      if(line[i]==='"' && line[i+1]==='"'){ out+='"'; i+=2; continue; }
-      if(line[i]==='"') break;
-      out+=line[i]; i++;
-    }
-    return out;
-  }
-  const idx = line.indexOf(',');
-  return idx===-1 ? line : line.slice(0, idx);
-}
-
+const { clean, parseCSV, toCSV } = CompanyNameCleaner;
 function getRawLines(text){
-  return text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>0);
+  return text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+}
+function readRows(){
+  const raw = document.getElementById('input').value;
+  return document.getElementById('inputMode').value === 'csv'
+    ? parseCSV(raw) : getRawLines(raw).map(name=>[name]);
+}
+function updateColumns(){
+  const select = document.getElementById('companyColumn');
+  const previous = select.value;
+  select.replaceChildren();
+  try {
+    const rows = readRows();
+    const count = rows.reduce((max,row)=>Math.max(max,row.length),1);
+    for(let i=0;i<count;i++){
+      const option = document.createElement('option');
+      option.value = i;
+      option.textContent = document.getElementById('hasHeader').checked && rows.length
+        ? `${i+1}: ${rows[0][i] || '(unnamed)'}` : `Column ${i+1}`;
+      select.appendChild(option);
+    }
+    if([...select.options].some(o=>o.value===previous)) select.value=previous;
+    document.getElementById('inputCount').textContent = `${rows.length} rows detected`;
+  } catch(error){ document.getElementById('inputCount').textContent=error.message; }
 }
 
 let currentPairs = [];
 
-function animatePipeline(cb){
-  const stages = document.querySelectorAll('.stage');
-  let i=0;
-  stages.forEach(s=>s.classList.remove('active'));
-  const iv = setInterval(()=>{
-    stages.forEach(s=>s.classList.remove('active'));
-    if(i < stages.length){ stages[i].classList.add('active'); i++; }
-    else { clearInterval(iv); stages.forEach(s=>s.classList.remove('active')); cb(); }
-  }, 70);
-}
-
 function process(){
-  const raw = document.getElementById('input').value;
-  let lines = getRawLines(raw);
-  if(lines.length===0) return;
-
-  // drop a plausible header row like "Company Name"
-  if(/^(company( ?name)?|name|organi[sz]ation)$/i.test(lines[0].replace(/["']/g,'').trim())){
-    lines = lines.slice(1);
+  try {
+    let rows = readRows();
+    if(document.getElementById('hasHeader').checked) rows=rows.slice(1);
+    const column=Number(document.getElementById('companyColumn').value || 0);
+    const names=rows.map(row=>row[column] || '').filter(n=>n.trim());
+    const options={removeDescriptors:document.getElementById('removeDescriptors').checked};
+    currentPairs=names.map(n=>[n,clean(n,options)]);
+    renderResults();
+    document.getElementById('error').textContent='';
+  } catch(error){
+    currentPairs=[];
+    document.getElementById('results').style.display='none';
+    document.getElementById('error').textContent=error.message;
   }
-
-  const names = lines.map(parseCSVLine).filter(n=>n.length>0);
-  currentPairs = names.map(n => [n, clean(n)]);
-
-  animatePipeline(()=>renderResults());
 }
 
 function renderResults(){
@@ -329,11 +270,6 @@ function escapeHtml(s){
   return d.innerHTML;
 }
 
-function csvCell(s){
-  if(/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
-  return s;
-}
-
 document.getElementById('processBtn').addEventListener('click', process);
 
 document.getElementById('clearBtn').addEventListener('click', ()=>{
@@ -341,17 +277,16 @@ document.getElementById('clearBtn').addEventListener('click', ()=>{
   document.getElementById('results').style.display='none';
   document.getElementById('inputCount').textContent='';
   currentPairs = [];
+  document.getElementById('error').textContent='';
+  updateColumns();
 });
 
-document.getElementById('input').addEventListener('input', (e)=>{
-  const n = getRawLines(e.target.value).length;
-  document.getElementById('inputCount').textContent = n ? n + ' rows detected' : '';
-});
+document.getElementById('input').addEventListener('input', updateColumns);
+for(const id of ['inputMode','hasHeader']) document.getElementById(id).addEventListener('change', updateColumns);
 
 document.getElementById('downloadBtn').addEventListener('click', ()=>{
-  const header = 'Company Name,Clean Company Name\n';
-  const body = currentPairs.map(([o,c])=>csvCell(o)+','+csvCell(c)).join('\n');
-  const blob = new Blob([header+body], {type:'text/csv;charset=utf-8;'});
+  const csv = toCSV([['Company Name','Clean Company Name'], ...currentPairs]);
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -376,11 +311,12 @@ function readFile(file){
   const reader = new FileReader();
   reader.onload = (e)=>{
     document.getElementById('input').value = e.target.result;
-    const n = getRawLines(e.target.result).length;
-    document.getElementById('inputCount').textContent = n + ' rows detected';
+    document.getElementById('inputMode').value = /\.csv$/i.test(file.name) ? 'csv' : 'names';
+    updateColumns();
   };
   reader.readAsText(file);
 }
 </script>
 </body>
 </html>
+
